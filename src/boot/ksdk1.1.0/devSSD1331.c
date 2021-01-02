@@ -8,8 +8,8 @@
 #include "warp.h"
 #include "devSSD1331.h"
 
-volatile uint8_t	inBuffer[1];
-volatile uint8_t	payloadBytes[1];
+volatile uint8_t	inBuffer[32];
+volatile uint8_t	payloadBytes[32];
 
 
 /*
@@ -24,8 +24,7 @@ enum
 	kSSD1331PinRST		= GPIO_MAKE_PIN(HW_GPIOB, 0),
 };
 
-static int
-writeCommand(uint8_t commandByte)
+int writeCommand(uint8_t commandByte)
 {
 	spi_status_t status;
 
@@ -35,7 +34,7 @@ writeCommand(uint8_t commandByte)
 	 *	Make sure there is a high-to-low transition by first driving high, delay, then drive low.
 	 */
 	GPIO_DRV_SetPinOutput(kSSD1331PinCSn);
-	OSA_TimeDelay(10);
+	//OSA_TimeDelay(1);
 	GPIO_DRV_ClearPinOutput(kSSD1331PinCSn);
 
 	/*
@@ -61,9 +60,9 @@ writeCommand(uint8_t commandByte)
 
 
 
-int
-devSSD1331init(void)
+void devSSD1331init(void)
 {
+
 	/*
 	 *	Override Warp firmware's use of these pins.
 	 *
@@ -126,20 +125,22 @@ devSSD1331init(void)
 	writeCommand(kSSD1331CommandVCOMH);		// 0xBE
 	writeCommand(0x3E);
 	writeCommand(kSSD1331CommandMASTERCURRENT);	// 0x87
-	writeCommand(0x06);
+	writeCommand(0x0F);
 	writeCommand(kSSD1331CommandCONTRASTA);		// 0x81
-	writeCommand(0x91);
+	writeCommand(0xFF);
 	writeCommand(kSSD1331CommandCONTRASTB);		// 0x82
-	writeCommand(0x50);
+	writeCommand(0xFF);
 	writeCommand(kSSD1331CommandCONTRASTC);		// 0x83
-	writeCommand(0x7D);
+	writeCommand(0xFF);
 	writeCommand(kSSD1331CommandDISPLAYON);		// Turn on oled panel
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with initialization sequence...\n");
 
 	/*
 	 *	To use fill commands, you will have to issue a command to the display to enable them. See the manual.
 	 */
 	writeCommand(kSSD1331CommandFILL);
 	writeCommand(0x01);
+	//SEGGER_RTT_WriteString(0, "\r\n\tDone with enabling fill...\n");
 
 	/*
 	 *	Clear Screen
@@ -149,15 +150,333 @@ devSSD1331init(void)
 	writeCommand(0x00);
 	writeCommand(0x5F);
 	writeCommand(0x3F);
+//	SEGGER_RTT_WriteString(0, "\r\n\tDone with screen clear...\n");
+    return;
+}
 
 
+void clearScreen(void)
+{
+    writeCommand(kSSD1331CommandCLEAR);
+    writeCommand(0x00);
+    writeCommand(0x00);
+    writeCommand(0x5F);
+    writeCommand(0x3F);
+    
+    return;
+}
 
-	/*
-	 *	Any post-initialization drawing commands go here.
-	 */
-	//...
+
+void clearSection(uint8_t column, uint8_t row, uint8_t across, uint8_t down){
+    
+    // Screen is upside down
+    row = 63 - row;
+    
+    writeCommand(kSSD1331CommandCLEAR);
+    writeCommand(column); // Column start address
+    writeCommand(row); // Row start address
+    writeCommand(column + across);   // Column end address
+    writeCommand(row + down);   // Row end address
+    return;
+}
+
+void drawLine(uint8_t column, uint8_t row, uint8_t across, uint8_t down, uint32_t colour){
+    
+    uint8_t red     = (colour >> 16) & 0xFF;
+    uint8_t green   = (colour >> 8) & 0xFF;
+    uint8_t blue    = colour & 0xFF;
+    
+    writeCommand(kSSD1331CommandDRAWLINE);
+    writeCommand(column);           // Column start address
+    writeCommand(row);              // Row start address
+    writeCommand(column + across);  // Column end address
+    writeCommand(row + down);       // Row end address
+    writeCommand(red);             // Red
+    writeCommand(green);             // Green
+    writeCommand(blue);             // Blue
+}
 
 
+// Draws digits in a 7x11 shaped box starting at the top left coordinates given
+void writeDigit(uint8_t column, uint8_t row, uint8_t digit, uint32_t colour)
+{
+    clearSection(column, row, 6, 10);
+    
+    row = 63 - row; // Screen is upside down
+    
+    switch (digit)
+    {
+    case 0:
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column, row + 1, 0, 8, colour);
+        drawLine(column + 6, row + 1, 0, 8, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+        drawLine(column + 1, row + 9, 4, -8, colour);
+    
+        break;
+    }
+    case 1:
+    {
+        drawLine(column + 3, row, 0, 10, colour);
+        drawLine(column + 3, row, -2, 2, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
 
-	return 0;
+        break;
+    }
+    case 2:
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column, row + 1, 0, 0, colour);
+        drawLine(column + 6, row + 1, 0, 3, colour);
+        drawLine(column, row + 10, 5, -5, colour);
+        drawLine(column, row + 10, 6, 0, colour);
+
+        break;
+    }
+    case 3:
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column, row + 1, 0, 0, colour);
+        drawLine(column + 6, row + 1, 0, 3, colour);
+        drawLine(column + 6, row + 6, 0, 3, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+        drawLine(column, row + 9, 0, 0, colour);
+        drawLine(column + 1, row + 5, 4, 0, colour);
+
+        break;
+    }
+    case 4:
+    {
+        drawLine(column + 5, row, 0, 10, colour);
+        drawLine(column, row + 5, 6, 0, colour);
+        drawLine(column, row + 5, 5, -5, colour);
+        
+        break;
+    }
+
+    case 5:
+    {
+        drawLine(column, row, 6, 0, colour);
+        drawLine(column, row, 0, 5, colour);
+        drawLine(column, row + 5, 4, 0, colour);
+        drawLine(column + 4, row + 5, 2, 2, colour);
+        drawLine(column + 6, row + 7, 0, 2, colour);
+        drawLine(column + 4, row + 10, 2, -2, colour);
+        drawLine(column + 1, row + 10, 3, 0, colour);
+        drawLine(column, row + 9, 0, 0, colour);
+        
+        break;
+    }
+    case 6:
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column + 6, row + 1, 0, 0, colour);
+        drawLine(column, row + 1, 0, 8, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+        drawLine(column + 6, row + 9, 0, -3, colour);
+        drawLine(column + 1, row + 5, 4, 0, colour);
+
+        break;
+    }
+    case 7:
+    {
+        drawLine(column, row, 6, 0, colour);
+        drawLine(column + 6, row, -3, 6, colour);
+        drawLine(column + 3, row + 6, 0, 4, colour);
+
+        break;
+    }
+    case 8:
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column, row + 1, 0, 3, colour);
+        drawLine(column + 6, row + 1, 0, 3, colour);
+        drawLine(column + 6, row + 6, 0, 3, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+        drawLine(column, row + 9, 0, -3, colour);
+        drawLine(column + 1, row + 5, 4, 0, colour);
+
+        break;
+    }
+    case 9:
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column, row + 1, 0, 3, colour);
+        drawLine(column + 6, row + 1, 0, 3, colour);
+        drawLine(column + 6, row + 6, 0, 3, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+        drawLine(column, row + 9, 0, 0, colour);
+        drawLine(column + 1, row + 5, 4, 0, colour);
+
+        break;
+    }
+    }
+    return;
+}
+
+// Writes a character symbol in a 7x11 sized box
+void writeCharacter(uint8_t column, uint8_t row, char character, uint32_t colour)
+{
+    clearSection(column, row, 6, 10);
+    
+    row = 63 - row; // Screen is upside down
+    
+    switch (character)
+    {
+    case 'A':
+    {
+        drawLine(column, row + 5, 3, -5, colour);
+        drawLine(column + 3, row, 3, 5, colour);
+        drawLine(column, row + 5, 5, 0, colour);
+        drawLine(column, row + 5, 0, 5, colour);
+        drawLine(column + 6, row + 5, 0, 5, colour);
+        
+        break;
+    }
+    case 'C':
+    {
+        drawLine(column + 2, row, 2, 0, colour);
+        drawLine(column + 4, row, 2, 2, colour);
+        drawLine(column, row + 2, 2, -2, colour);
+        drawLine(column, row + 2, 0, 6, colour);
+        drawLine(column, row + 8, 2, 2, colour);
+        drawLine(column + 2, row + 10, 2, 0, colour);
+        drawLine(column + 4, row + 10, 2, -2, colour);
+
+        break;
+    }
+    case 'E':
+    {
+        drawLine(column, row, 6, 0, colour);
+        drawLine(column, row + 5, 6, 0, colour);
+        drawLine(column, row + 10, 6 , 0, colour);
+        drawLine(column, row, 0, 10, colour);
+
+        break;
+    }
+    case 'G':
+    {
+        drawLine(column + 2, row, 2, 0, colour);
+        drawLine(column + 4, row, 2, 2, colour);
+        drawLine(column, row + 2, 2, -2, colour);
+        drawLine(column, row + 2, 0, 6, colour);
+        drawLine(column, row + 8, 2, 2, colour);
+        drawLine(column + 2, row + 10, 2, 0, colour);
+        drawLine(column + 4, row + 10, 2, -2, colour);
+        drawLine(column + 3, row + 5, 3, 0, colour);
+        drawLine(column + 6, row + 5, 0, 3, colour);
+
+
+        break;
+    }
+    case 'I':
+    {
+        drawLine(column + 3, row, 0, 10, colour);
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+
+        break;
+    }
+    case 'K':
+    {
+        drawLine(column, row, 0, 10, colour);
+        drawLine(column + 1, row + 5, 5, -5, colour);
+        drawLine(column + 1, row + 5, 5, 5, colour);
+        
+        break;
+    }
+    case 'L':
+    {
+        drawLine(column, row, 0, 10, colour);
+        drawLine(column, row + 10, 6, 0, colour);
+        
+        break;
+    }
+    case 'N':
+    {
+        drawLine(column, row, 0, 10, colour);
+        drawLine(column + 6, row, 0, 10, colour);
+        drawLine(column, row, 6, 10, colour);
+        
+        break;
+    }
+    
+    case 'P':
+    {
+        drawLine(column, row, 0, 10, colour);
+        drawLine(column, row, 3, 0, colour);
+        drawLine(column, row + 5, 3, 0, colour);
+        drawLine(column + 6, row + 2, 0, 2, colour);
+        drawLine(column + 4, row, 2, 2, colour);
+        drawLine(column + 4, row + 5, 2, -2, colour);
+        
+        break;
+    }
+            
+    case 'R':
+    {
+        drawLine(column, row, 0, 10, colour);
+        drawLine(column, row, 3, 0, colour);
+        drawLine(column, row + 5, 3, 0, colour);
+        drawLine(column + 6, row + 2, 0, 2, colour);
+        drawLine(column + 4, row, 2, 2, colour);
+        drawLine(column + 4, row + 5, 2, -2, colour);
+        drawLine(column + 3, row + 5, 3, 5, colour);
+        
+        break;
+    }
+            
+    case 'S':
+    {
+        drawLine(column + 1, row, 4, 0, colour);
+        drawLine(column + 6, row + 1, 0, 0, colour);
+        drawLine(column, row + 1, 0, 3, colour);
+        drawLine(column + 1, row + 5, 4, 0, colour);
+        drawLine(column + 6, row + 6, 0, 3, colour);
+        drawLine(column + 1, row + 10, 4, 0, colour);
+        drawLine(column, row + 9, 0, 0, colour);
+            
+        break;
+    }
+            
+    case 'T':
+    {
+        drawLine(column, row, 6, 0, colour);
+        drawLine(column + 3, row, 0, 10, colour);
+                
+        break;
+    }
+            
+    case 'U':
+    {
+        drawLine(column, row, 0, 7, colour);
+        drawLine(column, row + 8, 2, 2, colour);
+        drawLine(column + 2, row + 10, 2, 0, colour);
+        drawLine(column + 4, row + 10, 2, -2, colour);
+        drawLine(column + 6, row, 0, 7, colour);
+        
+                    
+        break;
+    }
+            
+    case 'W':
+    {
+        drawLine(column, row, 0, 10, colour);
+        drawLine(column + 6, row, 0, 10, colour);
+        drawLine(column, row + 10, 3, -3, colour);
+        drawLine(column + 6, row + 10, -3, -3, colour);
+                        
+        break;
+    }
+            
+    case '-':
+    {
+        drawLine(column, row + 5, 6, 0, colour);
+        break;
+    }
+            
+    }
+        
+    return;
 }
