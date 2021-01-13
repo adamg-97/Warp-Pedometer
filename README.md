@@ -3,7 +3,7 @@
 atg31  
 Jesus College Cambridge**
 
-https://github.com/adamg-97/Pedometer
+https://github.com/adamg-97/Warp-Pedometer
 
 A step counting and calorie tracking application developed for the FRDM KL03 evaluation board. Built using the [Warp firmware](https://github.com/physical-computation/Warp-firmware) platform developed by the University of Cambridge's [Physical Computation Laboratory](http://physcomp.eng.cam.ac.uk). 
 
