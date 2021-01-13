@@ -7,7 +7,7 @@
 	modification, are permitted provided that the following conditions
 	are met:
 
-	*	Redistributions of source code must retain the above
+	*	Redistributions of source code must  retain the above
 		copyright notice, this list of conditions and the following
 		disclaimer.
 
@@ -122,19 +122,31 @@ writeSensorRegisterMMA8451Q(uint8_t deviceRegister, uint8_t payload, uint16_t me
 }
 
 WarpStatus
-configureSensorMMA8451Q(uint8_t payloadF_SETUP, uint8_t payloadCTRL_REG1, uint16_t menuI2cPullupValue)
+configureSensorMMA8451Q(uint8_t payloadF_SETUP, uint8_t payloadCTRL_REG1_STB, uint8_t payloadXYZ_DATA, uint8_t payloadHP_CUTOFF, uint8_t payloadCTRL_REG1_ACT, uint16_t menuI2cPullupValue)
 {
-	WarpStatus	i2cWriteStatus1, i2cWriteStatus2;
+	WarpStatus	i2cWriteStatus1, i2cWriteStatus2, i2cWriteStatus3, i2cWriteStatus4, i2cWriteStatus5;
 
 	i2cWriteStatus1 = writeSensorRegisterMMA8451Q(kWarpSensorConfigurationRegisterMMA8451QF_SETUP /* register address F_SETUP */,
 							payloadF_SETUP /* payload: Disable FIFO */,
 							menuI2cPullupValue);
 
 	i2cWriteStatus2 = writeSensorRegisterMMA8451Q(kWarpSensorConfigurationRegisterMMA8451QCTRL_REG1 /* register address CTRL_REG1 */,
-							payloadCTRL_REG1 /* payload */,
+							payloadCTRL_REG1_STB /* payload */,
 							menuI2cPullupValue);
+    
+    i2cWriteStatus3 = writeSensorRegisterMMA8451Q(kWarpSensorConfigurationRegisterMMA8451QXYZ_DATA /* register address XYZ_DATA */,
+                            payloadXYZ_DATA /* payload */,
+                            menuI2cPullupValue);
+    
+    i2cWriteStatus4 = writeSensorRegisterMMA8451Q(kWarpSensorConfigurationRegisterMMA8451QHP_CUTOFF /* register address XYZ_DATA */,
+                            payloadHP_CUTOFF /* payload */,
+                            menuI2cPullupValue);
+    
+    i2cWriteStatus5 = writeSensorRegisterMMA8451Q(kWarpSensorConfigurationRegisterMMA8451QCTRL_REG1 /* register address CTRL_REG1 */,
+                            payloadCTRL_REG1_ACT /* payload */,
+                            menuI2cPullupValue);
 
-	return (i2cWriteStatus1 | i2cWriteStatus2);
+	return (i2cWriteStatus1 | i2cWriteStatus2 | i2cWriteStatus3 | i2cWriteStatus4 | i2cWriteStatus5);
 }
 
 WarpStatus
@@ -187,7 +199,7 @@ readSensorRegisterMMA8451Q(uint8_t deviceRegister, int numberOfBytes)
 							(uint8_t *)deviceMMA8451QState.i2cBuffer,
 							numberOfBytes,
 							gWarpI2cTimeoutMilliseconds);
-
+    
 	if (status != kStatus_I2C_Success)
 	{
 		return kWarpStatusDeviceCommunicationFailed;
@@ -203,7 +215,6 @@ printSensorDataMMA8451Q(bool hexModeFlag)
 	uint16_t	readSensorRegisterValueMSB;
 	int16_t		readSensorRegisterValueCombined;
 	WarpStatus	i2cReadStatus;
-
 
 	/*
 	 *	From the MMA8451Q datasheet:
@@ -228,6 +239,8 @@ printSensorDataMMA8451Q(bool hexModeFlag)
 	readSensorRegisterValueCombined = (readSensorRegisterValueCombined ^ (1 << 13)) - (1 << 13);
 
 
+    SEGGER_RTT_WriteString(0, "\r\n\tValues:\n");
+    
 	if (i2cReadStatus != kWarpStatusOK)
 	{
 		SEGGER_RTT_WriteString(0, " ----,");
@@ -299,4 +312,99 @@ printSensorDataMMA8451Q(bool hexModeFlag)
 			SEGGER_RTT_printf(0, " %d,", readSensorRegisterValueCombined);
 		}
 	}
+}
+
+
+int16_t readAxis_x(void)
+{
+    uint16_t    readSensorRegisterValueLSB;
+    uint16_t    readSensorRegisterValueMSB;
+    int16_t     readSensorRegisterValueCombined;
+    WarpStatus    i2cReadStatus;
+
+    /*
+     *    From the MMA8451Q datasheet:
+     *
+     *        "A random read access to the LSB registers is not possible.
+     *        Reading the MSB register and then the LSB register in sequence
+     *        ensures that both bytes (LSB and MSB) belong to the same data
+     *        sample, even if a new data sample arrives between reading the
+     *        MSB and the LSB byte."
+     *
+     *    We therefore do 2-byte read transactions, for each of the registers.
+     *    We could also improve things by doing a 6-byte read transaction.
+     */
+    i2cReadStatus = readSensorRegisterMMA8451Q(kWarpSensorOutputRegisterMMA8451QOUT_X_MSB, 2 /* numberOfBytes */);
+    readSensorRegisterValueMSB = deviceMMA8451QState.i2cBuffer[0];
+    readSensorRegisterValueLSB = deviceMMA8451QState.i2cBuffer[1];
+    readSensorRegisterValueCombined = ((readSensorRegisterValueMSB & 0xFF) << 6) | (readSensorRegisterValueLSB >> 2);
+
+    /*
+     *    Sign extend the 14-bit value based on knowledge that upper 2 bit are 0:
+     */
+    readSensorRegisterValueCombined = (readSensorRegisterValueCombined ^ (1 << 13)) - (1 << 13);
+    
+    if (i2cReadStatus != kWarpStatusOK)
+    {
+        return 0;
+    }
+    else
+    {
+        return readSensorRegisterValueCombined;
+    }
+}
+
+int16_t readAxis_y(void)
+{
+    uint16_t    readSensorRegisterValueLSB;
+    uint16_t    readSensorRegisterValueMSB;
+    int16_t     readSensorRegisterValueCombined;
+    WarpStatus    i2cReadStatus;
+    
+    i2cReadStatus = readSensorRegisterMMA8451Q(kWarpSensorOutputRegisterMMA8451QOUT_Y_MSB, 2 /* numberOfBytes */);
+    readSensorRegisterValueMSB = deviceMMA8451QState.i2cBuffer[0];
+    readSensorRegisterValueLSB = deviceMMA8451QState.i2cBuffer[1];
+    readSensorRegisterValueCombined = ((readSensorRegisterValueMSB & 0xFF) << 6) | (readSensorRegisterValueLSB >> 2);
+
+    /*
+     *    Sign extend the 14-bit value based on knowledge that upper 2 bit are 0:
+     */
+    readSensorRegisterValueCombined = (readSensorRegisterValueCombined ^ (1 << 13)) - (1 << 13);
+
+    if (i2cReadStatus != kWarpStatusOK)
+    {
+        return 0;
+    }
+    else
+    {
+        return readSensorRegisterValueCombined;
+    }
+}
+
+
+int16_t readAxis_z(void)
+{
+    uint16_t    readSensorRegisterValueLSB;
+    uint16_t    readSensorRegisterValueMSB;
+    int16_t     readSensorRegisterValueCombined;
+    WarpStatus    i2cReadStatus;
+    
+    i2cReadStatus = readSensorRegisterMMA8451Q(kWarpSensorOutputRegisterMMA8451QOUT_Z_MSB, 2 /* numberOfBytes */);
+    readSensorRegisterValueMSB = deviceMMA8451QState.i2cBuffer[0];
+    readSensorRegisterValueLSB = deviceMMA8451QState.i2cBuffer[1];
+    readSensorRegisterValueCombined = ((readSensorRegisterValueMSB & 0xFF) << 6) | (readSensorRegisterValueLSB >> 2);
+
+    /*
+     *    Sign extend the 14-bit value based on knowledge that upper 2 bit are 0:
+     */
+    readSensorRegisterValueCombined = (readSensorRegisterValueCombined ^ (1 << 13)) - (1 << 13);
+
+    if (i2cReadStatus != kWarpStatusOK)
+    {
+        return 0;
+    }
+    else
+    {
+        return readSensorRegisterValueCombined;
+    }
 }

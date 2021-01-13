@@ -43,6 +43,11 @@ typedef enum
 
 	kWarpTypeMaskTotalVOC		= (1 << 28),
 	kWarpTypeMaskEquivalentCO2	= (1 << 29),
+    
+    kWarpTypeMaskShuntVoltage,
+    kWarpTypeMaskBusVoltage,
+    kWarpTypeMaskPower,
+    kWarpTypeMaskCurrent,
 
 
 	/*
@@ -137,6 +142,7 @@ typedef enum
 {
 	kWarpSensorADXL362,
 	kWarpSensorMMA8451Q,
+    kWarpSensorINA219,
 	kWarpSensorBME680,
 	kWarpSensorBMX055accel,
 	kWarpSensorBMX055gyro,
@@ -183,6 +189,14 @@ typedef enum
 {
 	kWarpSensorConfigurationRegisterMMA8451QF_SETUP			= 0x09,
 	kWarpSensorConfigurationRegisterMMA8451QCTRL_REG1		= 0x2A,
+    kWarpSensorConfigurationRegisterMMA8451QXYZ_DATA        = 0x0E,
+    kWarpSensorConfigurationRegisterMMA8451QHP_CUTOFF       = 0x0F,
+    
+    kWarpSensorConfigurationRegisterINA219_CONF             = 0x00,
+    kWarpSensorConfigurationRegisterINA219_CALIB            = 0x05,
+    
+    kWarpSensorCalibrationINA219                            = 8192,
+    kWarpSensorConfigINA219                                 = 0b0000000110011111,
 
 	kWarpSensorConfigurationRegisterMAG3110CTRL_REG1		= 0x10,
 	kWarpSensorConfigurationRegisterMAG3110CTRL_REG2		= 0x11,
@@ -233,6 +247,11 @@ typedef enum
 	kWarpSensorOutputRegisterMMA8451QOUT_Y_LSB			= 0x04,
 	kWarpSensorOutputRegisterMMA8451QOUT_Z_MSB			= 0x05,
 	kWarpSensorOutputRegisterMMA8451QOUT_Z_LSB			= 0x06,
+    
+    kWarpSensorOutputRegisterINA219OUT_SHUNT_VOLTAGE    = 0x01,
+    kWarpSensorOutputRegisterINA219OUT_BUS_VOLTAGE      = 0x02,
+    kWarpSensorOutputRegisterINA219OUT_POWER            = 0x03,
+    kWarpSensorOutputRegisterINA219OUT_CURRENT          = 0x04,
 
 	kWarpSensorOutputRegisterMAG3110OUT_X_MSB			= 0x01,
 	kWarpSensorOutputRegisterMAG3110OUT_X_LSB			= 0x02,
@@ -346,3 +365,5 @@ void		enableI2Cpins(uint8_t pullupValue);
 void		disableI2Cpins(void);
 void		enableSPIpins(void);
 void		disableSPIpins(void);
+
+
